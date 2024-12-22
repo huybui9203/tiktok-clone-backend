@@ -1,0 +1,73 @@
+{
+    "name": "tiktok-backend",
+    "version": "1.0.0",
+    "description": "",
+    "main": "src/server.js",
+    "scripts": {
+        "init-table": "npx sequelize-cli db:migrate",
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "prepare": "husky",
+        "beautiful": "lint-staged",
+        "start": "cross-env BUILD_MODE=development nodemon --exec babel-node --inspect src/server.js",
+        "clean": "rm -rf build && mkdir build",
+        "clean:window": "(if exist build rmdir /s /q build) && mkdir build",
+        "remove-build:window": "if exist build rmdir /s /q build",
+        "build-babel": "babel ./src -d ./build/src",
+        "build": "npm run clean:window && npm run build-babel",
+        "production": "npm run build && cross-env NODE_ENV=production node ./build/src/server.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/huybui9203/tiktok-clone-backend.git"
+    },
+    "keywords": [
+        "tiktok-clone"
+    ],
+    "author": "huybui",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/huybui9203/tiktok-clone-backend/issues"
+    },
+    "homepage": "https://github.com/huybui9203/tiktok-clone-backend#readme",
+    "lint-staged": {
+        "src/**/*.{js, json}": "prettier --write"
+    },
+    "dependencies": {
+        "@babel/runtime": "^7.25.6",
+        "bcrypt": "^5.1.1",
+        "cloudinary": "^1.41.3",
+        "cookie-parser": "^1.4.7",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.21.0",
+        "http-status-codes": "^2.3.0",
+        "ioredis": "^5.4.1",
+        "joi": "^17.13.3",
+        "jsonwebtoken": "^9.0.2",
+        "multer": "^1.4.5-lts.1",
+        "multer-storage-cloudinary": "^4.0.0",
+        "mysql2": "^3.11.3",
+        "nodemailer": "^6.9.15",
+        "nodemon": "^3.1.7",
+        "passport": "^0.7.0",
+        "passport-facebook": "^3.0.0",
+        "passport-google-oauth20": "^2.0.0",
+        "passport-jwt": "^4.0.1",
+        "uid": "^2.0.2",
+        "uuid": "^11.0.2"
+    },
+    "devDependencies": {
+        "@babel/cli": "^7.25.6",
+        "@babel/core": "^7.25.2",
+        "@babel/node": "^7.25.0",
+        "@babel/plugin-transform-runtime": "^7.25.4",
+        "@babel/preset-env": "^7.25.4",
+        "babel-plugin-module-resolver": "^5.0.2",
+        "cross-env": "^7.0.3",
+        "husky": "^9.1.6",
+        "lint-staged": "^15.2.10",
+        "prettier": "^3.3.3",
+        "sequelize": "^6.37.4",
+        "sequelize-cli": "^6.6.2"
+    }
+}
