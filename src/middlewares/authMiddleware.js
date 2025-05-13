@@ -14,8 +14,26 @@ const authMiddleware = (req, res, next) => {
         req.currentUser = payload;
         next();
     } catch (error) {
-        next(error)
+        next(error);
     }
 };
 
+const authMiddlewareForVideoRoute = (req, res, next) => {
+    try {
+        const token = req.get('Authorization')?.split(' ')[1];
+
+        if (!token) {
+            req.currentUser = null;
+            next();
+            return;
+        }
+        const payload = tokenService.verifyToken(token, jwtTypes.ACCESS);
+        req.currentUser = payload;
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+export { authMiddlewareForVideoRoute };
 export default authMiddleware;

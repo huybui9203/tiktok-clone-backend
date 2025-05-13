@@ -1,6 +1,4 @@
 import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
 const videoDest = 'src/public/videos';
 const imageDest = 'src/public/images';
 
@@ -26,7 +24,7 @@ const videoStorage = (dest) =>
             const { uploadId, chunk } = req.query;
             console.log(uploadId, chunk);
             const fileExt = file.originalname.split('.').pop();
-           
+
             cb(null, `${uploadId}.part${chunk}.${fileExt}`);
         },
     });
@@ -41,6 +39,18 @@ const videoFileFilter = (req, file, cb) => {
 
 const imageFileFilter = (req, file, cb) => {
     if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png') {
+        cb(null, true);
+    } else {
+        cb({ message: 'Unsupported File Format' }, false);
+    }
+};
+
+const attachmentFilter = (req, file, cb) => {
+    if (
+        file.mimetype === 'image/jpeg' ||
+        file.mimetype === 'image/png' ||
+        file.mimetype === 'video/mp4'
+    ) {
         cb(null, true);
     } else {
         cb({ message: 'Unsupported File Format' }, false);
@@ -65,4 +75,13 @@ const imageMulter = multer({
     fileFilter: imageFileFilter,
 });
 
-export { videoMulter, imageMulter };
+const attachmentMulter = multer({
+    storage: storage(imageDest),
+    limits: {
+        fieldNameSize: 200, //200 B
+        fileSize: 100 * 1024 * 1024, //100 MB
+    },
+    fileFilter: attachmentFilter,
+});
+
+export { videoMulter, imageMulter, attachmentMulter };

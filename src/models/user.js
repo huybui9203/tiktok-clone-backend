@@ -2,13 +2,6 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
     class User extends Model {
-        async getLikeables(options) {
-            const comments = await this.getComments(options);
-            const videos = await this.getVideos(options);
-            // Concat comments and videos in a single array of taggables
-            return comments.concat(videos);
-        }
-
         static associate(models) {
             User.belongsToMany(models.User, {
                 through: models.Follow,
@@ -54,12 +47,72 @@ module.exports = (sequelize, DataTypes) => {
                     model: models.Like,
                     unique: false,
                     scope: {
-                        likeable_type: 'comment'
-                    }
+                        likeable_type: 'comment',
+                    },
                 },
                 foreignKey: 'user_id',
                 as: 'liked_comments',
                 constraints: false,
+            });
+
+            User.belongsToMany(models.Message, {
+                through: {
+                    model: models.Reaction,
+                    unique: false,
+                    scope: {
+                        reactable_type: 'message',
+                    },
+                },
+                foreignKey: 'user_id',
+                as: 'reacted_messages',
+                constraints: false,
+            });
+
+            User.belongsToMany(models.Conversation, {
+                through: models.Message,
+                foreignKey: 'sender_id',
+                as: 'sender_messages',
+                onDelete: 'SET NULL',
+            });
+
+            User.belongsToMany(models.Conversation, {
+                through: models.Conversation_member,
+                foreignKey: 'user_id',
+                as: 'conversations',
+                onDelete: 'CASCADE',
+            });
+
+            User.hasMany(models.Conversation_member, {
+                foreignKey: 'user_id',
+                as: 'list-members',
+            });
+
+            User.hasMany(models.Message, {
+                foreignKey: 'sender_id',
+            });
+
+            User.hasMany(models.Reaction, {
+                foreignKey: 'user_id',
+            });
+
+            User.hasMany(models.Notification, {
+                foreignKey: 'user_id',
+                as: 'notifications',
+            });
+
+            User.hasMany(models.Share, {
+                foreignKey: 'user_id',
+                as: 'shared_videos',
+            });
+
+            User.hasMany(models.Follow, {
+                foreignKey: 'following_id',
+                as: 'follower',
+            });
+
+            User.hasMany(models.Report, {
+                foreignKey: 'user_id',
+                as: 'reported',
             });
         }
     }
@@ -84,40 +137,18 @@ module.exports = (sequelize, DataTypes) => {
             twitter_url: DataTypes.STRING,
             instagram_url: DataTypes.STRING,
             email_verified_at: DataTypes.DATE,
+            followings_count: DataTypes.INTEGER,
+            followers_count: DataTypes.INTEGER,
+            likes_count: DataTypes.INTEGER,
+            videos_count: DataTypes.INTEGER,
+            nickname_updated_at: DataTypes.DATE,
+            role: DataTypes.ENUM('user', 'admin', 'super_admin'),
+            status: DataTypes.ENUM('Active', 'Banned', 'Inactive', 'Suspended'),
         },
         {
             sequelize,
             modelName: 'User',
             timestamps: true,
-            hooks: {
-                // afterFind: (result) => {
-                //     if (Array.isArray(result)) {
-                //         result.forEach((item) => {
-                //             item.dataValues.createdAt = formatDate(
-                //                 item.dataValues.createdAt
-                //             );
-                //             item.dataValues.updatedAt = formatDate(
-                //                 item.dataValues.updatedAt
-                //             );
-                //         });
-                //     } else if (result) {
-                //         result.dataValues.createdAt = formatDate(
-                //             result.dataValues.createdAt
-                //         );
-                //         result.dataValues.updatedAt = formatDate(
-                //             result.dataValues.updatedAt
-                //         );
-                //     }
-                // },
-                // afterCreate: (record) => {
-                //     record.dataValues.createdAt = formatDate(
-                //         record.dataValues.createdAt
-                //     );
-                //     record.dataValues.updatedAt = formatDate(
-                //         record.dataValues.updatedAt
-                //     );
-                // },
-            },
         }
     );
     return User;

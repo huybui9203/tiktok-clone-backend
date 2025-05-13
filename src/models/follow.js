@@ -2,7 +2,15 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
     class Follow extends Model {
-        static associate(models) {}
+        static associate(models) {
+            Follow.belongsTo(models.User, {
+                foreignKey: 'following_id',
+                targetKey: 'id',
+                as: 'followee',
+                onDelete: 'CASCADE',
+            });
+
+        }
     }
     Follow.init(
         {

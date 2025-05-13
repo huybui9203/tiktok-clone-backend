@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: 'parent_id',
                 as: 'reply_comments',
             });
+
             Comment.belongsTo(models.Comment, {
                 foreignKey: 'parent_id',
                 targetKey: 'id',
@@ -38,6 +39,22 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: 'likeable_id',
                 constraints: false,
             });
+
+            Comment.hasMany(models.Tags, {
+                foreignKey: 'taggable_id',
+                constraints: false,
+                scope: {
+                    taggable_type: 'comment',
+                },
+                as: 'tags',
+            });
+
+            Comment.hasMany(models.Report, {
+                foreignKey: 'reportable_id',
+                as: 'report_info',
+                constraints: false,
+                scope: { reportable_type: 'comment' },
+            });
         }
     }
     Comment.init(
@@ -46,9 +63,11 @@ module.exports = (sequelize, DataTypes) => {
             video_id: DataTypes.INTEGER,
             is_author_video: DataTypes.BOOLEAN,
             comment: DataTypes.STRING,
-            tags: DataTypes.JSON,
             parent_id: DataTypes.INTEGER,
             path: DataTypes.STRING,
+            likes_count: DataTypes.INTEGER,
+            replies_count: DataTypes.INTEGER,
+            edited_at: DataTypes.DATE,
         },
         {
             sequelize,

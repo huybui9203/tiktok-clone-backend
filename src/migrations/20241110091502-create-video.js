@@ -62,15 +62,55 @@ module.exports = {
                 allowNull: false,
                 type: Sequelize.DATE,
             },
+            likes_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            comments_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            shares_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            views_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            favorites_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
         });
     },
     async down(queryInterface, Sequelize) {
         await queryInterface.dropTable('Videos');
     },
     async up(queryInterface, Sequelize) {
-       
-        await queryInterface.changeColumn('Videos', 'thumb', {
-            type: Sequelize.JSON,
+        // await queryInterface.changeColumn('Videos', 'thumb', {
+        //     type: Sequelize.JSON,
+        // });
+        // await queryInterface.addColumn('Videos', 'likes_count', {
+        //     type: Sequelize.INTEGER,
+        //     defaultValue: 0,
+        // });
+        // await queryInterface.addColumn('Videos', 'comments_count', {
+        //     type: Sequelize.INTEGER,
+        //     defaultValue: 0,
+        // });
+        // await queryInterface.addColumn('Videos', 'shares_count', {
+        //     type: Sequelize.INTEGER,
+        //     defaultValue: 0,
+        // });
+        // await queryInterface.addColumn('Videos', 'views_count', {
+        //     type: Sequelize.INTEGER,
+        //     defaultValue: 0,
+        // });
+        await queryInterface.addColumn('Videos', 'status', {
+            type: Sequelize.ENUM('pending', 'approved', 'rejected'),
+            allowNull: false,
+            defaultValue: 'pending',
         });
     },
 };

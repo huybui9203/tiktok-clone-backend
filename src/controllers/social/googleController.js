@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import passport from 'passport';
-import env from '~/config/environment';
 import { StatusCodes } from 'http-status-codes';
 import { googleStrategy } from '~/config/passport';
+import env from '~/config/environment';
 import * as authService from '~/services/authService';
 import * as socialController from './socialController'
 

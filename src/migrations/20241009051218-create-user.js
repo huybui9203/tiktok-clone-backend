@@ -95,9 +95,69 @@ module.exports = {
                 allowNull: false,
                 type: Sequelize.DATE,
             },
+            followings_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            followers_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            likes_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            videos_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            nickname_updated_at: {
+                type: Sequelize.DATE,
+                defaultValue: null,
+            },
+            role: {
+                type: Sequelize.ENUM('user', 'admin', 'super_admin'),
+                defaultValue: 'user',
+                allowNull: false,
+            },
+            status: {
+                type: Sequelize.ENUM(
+                    'Active',
+                    'Banned',
+                    'Inactive',
+                    'Suspended'
+                ),
+                defaultValue: 'Active',
+                allowNull: false,
+            },
+        });
+    },
+    async up(queryInterface, Sequelize) {
+        await queryInterface.addColumn('Users', 'followings_count', {
+            type: Sequelize.INTEGER,
+            defaultValue: 0,
+        });
+        await queryInterface.addColumn('Users', 'followers_count', {
+            type: Sequelize.INTEGER,
+            defaultValue: 0,
+        });
+        await queryInterface.addColumn('Users', 'likes_count', {
+            type: Sequelize.INTEGER,
+            defaultValue: 0,
+        });
+        await queryInterface.addColumn('Users', 'videos_count', {
+            type: Sequelize.INTEGER,
+            defaultValue: 0,
         });
     },
     async down(queryInterface, Sequelize) {
         await queryInterface.dropTable('Users');
+    },
+    async up(queryInterface, Sequelize) {
+        await queryInterface.changeColumn('Users', 'status', {
+            type: Sequelize.ENUM('Active', 'Banned', 'Inactive', 'Suspended'),
+            defaultValue: 'Active',
+            allowNull: false,
+        });
     },
 };

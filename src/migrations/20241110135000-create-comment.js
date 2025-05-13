@@ -33,10 +33,6 @@ module.exports = {
             comment: {
                 type: Sequelize.STRING,
             },
-            tags: {
-                type: Sequelize.JSON,
-                defaultValue: '[]',
-            },
             parent_id: {
                 type: Sequelize.INTEGER,
                 references: {
@@ -44,7 +40,7 @@ module.exports = {
                     key: 'id',
                 },
                 allowNull: true,
-                onDelete: 'SET NULL',
+                onDelete: 'CASCADE',
             },
             createdAt: {
                 allowNull: false,
@@ -54,15 +50,31 @@ module.exports = {
                 allowNull: false,
                 type: Sequelize.DATE,
             },
+            path: {
+                allowNull: true,
+                type: Sequelize.STRING,
+            },
+            likes_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            replies_count: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+            },
+            edited_at: {
+                type: Sequelize.DATE,
+                defaultValue: null,
+            },
         });
     },
     async down(queryInterface, Sequelize) {
         await queryInterface.dropTable('Comments');
     },
-    async up(queryInterface, Sequelize) {
-        await queryInterface.addColumn('Comments', 'path', {
-            type: Sequelize.STRING,
-            allowNull: true,
-        });
-    },
+    // async up(queryInterface, Sequelize) {
+    //     // await queryInterface.addColumn('Comments', 'edited_at', {
+    //     //     type: Sequelize.DATE,
+    //     //     defaultValue: null,
+    //     // });
+    // },
 };

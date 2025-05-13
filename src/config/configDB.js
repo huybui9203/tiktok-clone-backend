@@ -1,14 +1,16 @@
-
-require('dotenv').config()
+require('dotenv').config();
 
 const getTimezone = () => {
     const offset = new Date().getTimezoneOffset(); //minutes
-    const hours = Math.abs(Math.floor(offset / 60)).toString().padStart(2, '0');
-    const minutes = Math.abs(offset % 60).toString().padStart(2, '0');
+    const hours = Math.abs(Math.floor(offset / 60))
+        .toString()
+        .padStart(2, '0');
+    const minutes = Math.abs(offset % 60)
+        .toString()
+        .padStart(2, '0');
     const sign = offset > 0 ? '-' : '+';
     return `${sign}${hours}:${minutes}`;
-}
-
+};
 
 const configDB = {
     development: {
@@ -19,7 +21,8 @@ const configDB = {
         port: process.env.DB_PORT,
         dialect: process.env.DB_DIALECT,
         timezone: getTimezone(), //for writing to db
-        dialectOptions: { //for reading from db
+        dialectOptions: {
+            //for reading from db
             // useUTC: false,
             dateStrings: true,
             typeCast: true,
@@ -32,10 +35,8 @@ const configDB = {
             min: 0, // Minimum number of connections in the pool
             acquire: 30000, // Maximum time, in milliseconds, that a connection can be acquired
             idle: 10000, // Maximum time, in milliseconds, that a connection can be idle before being released
-          },
-        // logging: false,
-        
-        
+        },
+        logging: false,
     },
     test: {
         username: 'root',
@@ -44,7 +45,7 @@ const configDB = {
         host: '127.0.0.1',
         dialect: 'mysql',
         timezone: getTimezone(),
-        dialectOptions: { 
+        dialectOptions: {
             dateStrings: true,
             typeCast: true,
         },
@@ -56,11 +57,11 @@ const configDB = {
         host: '127.0.0.1',
         dialect: 'mysql',
         timezone: getTimezone(),
-        dialectOptions: { 
+        dialectOptions: {
             dateStrings: true,
             typeCast: true,
         },
     },
 };
 
-module.exports = configDB
+module.exports = configDB;

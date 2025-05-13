@@ -49,7 +49,8 @@ const updateProfile = async (req, res, next) => {
         nickname: Joi.string().min(0).max(30).trim(),
         bio: Joi.string().min(0).max(80).trim(),
         publicId: Joi.string().trim(),
-    });
+        lastNicknameUpdatedAt: Joi.date(),
+    }).or('username', 'nickname', 'bio', 'publicId');
     validate(profileSchema, req.body)
         .then(() => {
             next();
@@ -57,4 +58,28 @@ const updateProfile = async (req, res, next) => {
         .catch(next);
 };
 
-export { updateUser, updateProfile };
+const searchUser = async (req, res, next) => {
+    const schema = Joi.object({
+        q: Joi.string().max(24).trim().required(),
+        page: Joi.number().integer().required(),
+        type: Joi.string().trim(),
+    });
+    validate(schema, req.query)
+        .then(() => {
+            next();
+        })
+        .catch(next);
+};
+
+const deleteUser = async (req, res, next) => {
+    const schema = Joi.object({
+        id: Joi.number().integer().required(),
+    });
+    validate(schema, req.params)
+        .then(() => {
+            next();
+        })
+        .catch(next);
+};
+
+export { updateUser, updateProfile, searchUser, deleteUser };

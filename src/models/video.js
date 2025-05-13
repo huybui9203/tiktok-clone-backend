@@ -28,9 +28,49 @@ module.exports = (sequelize, DataTypes) => {
                 constraints: false,
             });
 
+            Video.hasMany(models.Like, {
+                foreignKey: 'likeable_id',
+                as: 'like_info',
+                constraints: false,
+                scope: { likeable_type: 'video' },
+            });
+
             Video.hasMany(models.Comment, {
                 foreignKey: 'video_id',
                 as: 'comments',
+            });
+
+            Video.hasMany(models.Tags, {
+                foreignKey: 'taggable_id',
+                constraints: false,
+                scope: {
+                    taggable_type: 'video',
+                },
+                as: 'tags',
+            });
+
+            Video.hasMany(models.Share, {
+                foreignKey: 'video_id',
+                as: 'sharers',
+            });
+
+            Video.hasMany(models.Favorite, {
+                foreignKey: 'video_id',
+                as: 'favorite_info',
+            });
+
+            Video.belongsTo(models.Video_categories, {
+                foreignKey: 'category_id',
+                targetKey: 'id',
+                as: 'category',
+                onDelete: 'Set null',
+            });
+
+            Video.hasMany(models.Report, {
+                foreignKey: 'reportable_id',
+                as: 'report_info',
+                constraints: false,
+                scope: { reportable_type: 'video' },
             });
         }
     }
@@ -46,6 +86,13 @@ module.exports = (sequelize, DataTypes) => {
             allows: DataTypes.JSON,
             published_at: DataTypes.DATE,
             meta: DataTypes.JSON,
+            likes_count: DataTypes.INTEGER,
+            comments_count: DataTypes.INTEGER,
+            shares_count: DataTypes.INTEGER,
+            views_count: DataTypes.INTEGER,
+            favorites_count: DataTypes.INTEGER,
+            category_id: DataTypes.INTEGER,
+            status: DataTypes.ENUM('pending', 'approved', 'rejected'),
         },
         {
             sequelize,

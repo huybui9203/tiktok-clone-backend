@@ -1,9 +1,11 @@
 // import { CloudinaryStorage } from 'multer-storage-cloudinary';
-import { videoMulter, imageMulter } from '~/config/multer';
+import { videoMulter, imageMulter, attachmentMulter } from '~/config/multer';
 import cloudinary from '~/config/cloudinary';
 
 const videoMulterUpload = videoMulter.single('video');
 const imageMulterUpload = imageMulter.single('image');
+const attachmentMulterUpload = attachmentMulter.array('attachments', 10);
+const singleAttachmentMulterUpload = attachmentMulter.single('attachment');
 
 const folderOnCloud = {
     video: 'tiktok-clone/videos',
@@ -28,6 +30,26 @@ const uploadImageToCloud = async (file) => {
             transformation: {
                 width: 300,
                 height: 300,
+                crop: 'fill',
+                gravity: 'center',
+                quality: 'auto',
+            },
+        })
+        .then((image) => [undefined, image])
+        .catch((err) => [err, undefined]);
+
+    return result;
+};
+
+const uploadChatAvatarToCloud = async (file) => {
+    const result = await cloudinary.uploader
+        .upload(file, {
+            folder: folderOnCloud.image,
+            resource_type: 'image',
+            format: 'jpg',
+            transformation: {
+                width: 120,
+                height: 120,
                 crop: 'fill',
                 gravity: 'center',
                 quality: 'auto',
@@ -109,10 +131,13 @@ const destroyImage = async (publicId) => {
 };
 
 export {
+    singleAttachmentMulterUpload,
+    attachmentMulterUpload,
     videoMulterUpload,
     imageMulterUpload,
     uploadImageToCloud,
     uploadVideoToCloud,
     uploadCoverToCloud,
+    uploadChatAvatarToCloud,
     destroyImage,
 };

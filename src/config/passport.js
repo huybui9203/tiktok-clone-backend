@@ -1,6 +1,5 @@
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as FacebookStrategy } from 'passport-facebook';
-import passport from 'passport';
 import env from './environment';
 import db from '~/models';
 import { Op } from 'sequelize';
@@ -44,18 +43,21 @@ const googleVerify = async (accessToken, refreshToken, profile, cb) => {
             return cb(null, user);
         }
 
-        ggData.username = generateUniqueUsername([ggData.first_name, ggData.last_name])
-        
-        const [err, image] = await uploadImageToCloud(ggData.avatar)
-        if(err) {
-            throw err
+        ggData.username = generateUniqueUsername([
+            ggData.first_name,
+            ggData.last_name,
+        ]);
+
+        const [err, image] = await uploadImageToCloud(ggData.avatar);
+        if (err) {
+            throw err;
         } else {
             // avatar = image.url
             ggData.avatar = {
                 public_id: image.public_id,
                 lg: image.secure_url,
-                sm: image.eager[0].secure_url
-            }
+                sm: image.eager[0].secure_url,
+            };
         }
 
         const newUser = await db.User.create(ggData);
@@ -101,17 +103,20 @@ const facebookVerify = async (accessToken, refreshToken, profile, cb) => {
             return cb(null, user);
         }
 
-        fbData.username = generateUniqueUsername([fbData.first_name, fbData.last_name])
-        
-        const [err, image] = await uploadImageToCloud(fbData.avatar)
-        if(err) {
-            throw err
+        fbData.username = generateUniqueUsername([
+            fbData.first_name,
+            fbData.last_name,
+        ]);
+
+        const [err, image] = await uploadImageToCloud(fbData.avatar);
+        if (err) {
+            throw err;
         } else {
             fbData.avatar = {
                 public_id: image.public_id,
                 lg: image.secure_url,
-                sm: image.eager[0].secure_url
-            }
+                sm: image.eager[0].secure_url,
+            };
         }
 
         const newUser = await db.User.create(fbData);

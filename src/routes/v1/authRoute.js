@@ -3,6 +3,7 @@ import * as authController from '~/controllers/authController';
 import * as authValidation from '~/validations/authValidation';
 import * as googleController from '~/controllers/social/googleController';
 import * as facebookController from '~/controllers/social/facebookController';
+import authMiddleware from '~/middlewares/authMiddleware';
 
 const router = Router();
 
@@ -18,9 +19,9 @@ router.post(
     authValidation.resetPassword,
     authController.resetPassword
 );
-router.get('/me', authController.getCurrentUser);
-router.post('/logout', authController.logout);
-router.post('/refresh-token', authController.refeshToken);
+router.get('/me', authMiddleware, authController.getCurrentUser);
+router.post('/logout', authMiddleware, authController.logout);
+router.post('/refresh-token', authController.refreshToken);
 
 //google
 router.get('/google', googleController.googleAuth());

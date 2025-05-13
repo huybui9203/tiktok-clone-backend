@@ -2,7 +2,14 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
     class Favorite extends Model {
-        static associate(models) {}
+        static associate(models) {
+            Favorite.belongsTo(models.Video, {
+                foreignKey: 'video_id',
+                targetKey: 'id',
+                as: 'video',
+                onDelete: 'CASCADE',
+            });
+        }
     }
     Favorite.init(
         {

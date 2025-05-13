@@ -1,7 +1,5 @@
 import Redis from 'ioredis';
 import env from './environment';
-import ApiError from '~/utils/ApiError';
-import { StatusCodes } from 'http-status-codes';
 
 // Redis.Promise.onPossiblyUnhandledRejection(function (error) {
 //     // you can log the error here.

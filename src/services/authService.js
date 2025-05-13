@@ -16,19 +16,41 @@ const getOTP = async (email) => {
 
 const generateOTPCode = () => `${Math.floor(100000 + Math.random() * 900000)}`;
 
+const getUserIfNotActive = async (user) => {
+    if (user.status === 'Suspended') {
+        const expiredTime = await redisClient.get(`user_suspended:${user.id}`);
+        if (expiredTime) {
+            return { user, isAvailable: false, expiredTime };
+        } else {
+            await db.User.update(
+                { status: 'Active' },
+                { where: { id: user.id } }
+            );
+        }
+    } else if (['Inactive', 'Banned'].includes(user.status)) {
+        return { user, isAvailable: false };
+    }
+};
+
 const loginWithEmailAndPassword = async (email, password) => {
     try {
         const user = await userService.getUserbyEmail(email);
         if (!user) {
             throw new ApiError(StatusCodes.UNAUTHORIZED, 'Incorrect email');
         }
+
+        const ressult = await getUserIfNotActive(user);
+        if (ressult) {
+            return ressult;
+        }
+
         const { password: hashedPassword } = user;
 
         const validPassword = await bcrypt.compare(password, hashedPassword);
         if (!validPassword) {
             throw new ApiError(StatusCodes.UNAUTHORIZED, 'Incorrect password');
         }
-        return user;
+        return { user, isAvailable: true };
     } catch (error) {
         if (error instanceof ApiError) {
             throw error;
@@ -51,12 +73,18 @@ const refreshAuths = async (refreshToken) => {
             `refresh_token:${payload.sub}`
         );
         if (!existRefreshToken || existRefreshToken !== refreshToken) {
+            console.log(
+                '>>>>>>>>>>>>>>',
+                'Authenticate failed',
+                existRefreshToken
+            );
             throw new ApiError(StatusCodes.UNAUTHORIZED, 'Authenticate failed');
         }
         await redisClient.del(`refresh_token:${payload.sub}`);
         const remainRTExpires = Math.floor(payload.exp - Date.now() / 1000);
         const tokens = await tokenService.generateAuthTokens(
             payload.sub,
+            payload.role,
             JWT_EXPIRES.accessToken,
             remainRTExpires
         );
@@ -128,4 +156,5 @@ export {
     refreshAuths,
     loginWithSocial,
     saveTokenAuth,
+    getUserIfNotActive,
 };

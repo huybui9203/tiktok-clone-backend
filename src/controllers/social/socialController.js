@@ -11,7 +11,10 @@ const loginWithSocial = async (req, res, next) => {
             tokenAuth,
             socialType
         );
-        const tokens = await tokenService.generateAuthTokens(user.id);
+        const tokens = await tokenService.generateAuthTokens(
+            user.id,
+            user.role
+        );
 
         res.cookie('refresh_token', tokens.refresh_token, {
             httpOnly: true,

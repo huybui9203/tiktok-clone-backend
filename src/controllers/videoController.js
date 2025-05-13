@@ -1,21 +1,23 @@
-import ApiError from '~/utils/ApiError';
-import { v4 as uuidv4 } from 'uuid';
-import {
-    videoMulterUpload,
-    uploadImageToCloud,
-    uploadVideoToCloud,
-    imageMulterUpload,
-    uploadCoverToCloud,
-} from '~/utils/uploadFile';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 import { StatusCodes } from 'http-status-codes';
+
+import {
+    videoMulterUpload,
+    uploadVideoToCloud,
+    uploadCoverToCloud,
+} from '~/utils/uploadFile';
+import { io } from '~/sockets/socket';
+import { ROLE } from '~/config/roles';
+import ApiError from '~/utils/ApiError';
 import * as videoServices from '~/services/videoServices';
-console.log(path.join(__dirname, '..', 'public', 'video', 'abc.mp4'));
+import * as userService from '~/services/userService';
+import * as notificationService from '~/services/notificationService';
+import * as chatService from '~/services/chatService';
 
 const uploadVideo = (req, res, next) => {
-    // this route don't have validated yet
     videoMulterUpload(req, res, (err) => {
         if (!req.file) {
             next(new ApiError(StatusCodes.BAD_REQUEST, 'No file provided'));
@@ -28,14 +30,9 @@ const uploadVideo = (req, res, next) => {
             next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, err.message));
             return;
         }
-        // const { file } = req;
-        // if (fs.existsSync(file.path)) {
-        //     fs.unlinkSync(file.path);
-        // }
         const { chunk, uploadId } = req.query;
         const { totalChunks } = req.body;
         if (+chunk === +(totalChunks - 1)) {
-            // const { path } = req.file;
             const finalPath = `src/public/videos/${uploadId}.final.mp4`;
             const writeStream = fs.createWriteStream(finalPath);
 
@@ -51,7 +48,6 @@ const uploadVideo = (req, res, next) => {
             writeStream.end();
 
             writeStream.on('finish', () => {
-                //upload to cloud
                 uploadVideoToCloud(finalPath).then(([err, video]) => {
                     if (err) {
                         next(new ApiError(err.http_code, err.message));
@@ -67,10 +63,6 @@ const uploadVideo = (req, res, next) => {
                     }
                     fs.unlinkSync(finalPath);
                 });
-
-                // setTimeout(() => {
-                //     res.json({ msg: 'finished' });
-                // }, 3000);
             });
 
             // Event listener for any errors during the write operation
@@ -100,6 +92,7 @@ const createNew = async (req, res, next) => {
             timePostVideo,
             videoData,
             viewable,
+            categoryId,
         } = req.body;
 
         const currentUserId = req.currentUser?.sub;
@@ -111,6 +104,7 @@ const createNew = async (req, res, next) => {
             music,
             viewable,
             allows,
+            category_id: categoryId,
             published_at:
                 timePostVideo === 'Now' ? new Date() : new Date(timePostVideo),
         };
@@ -146,12 +140,15 @@ const createNew = async (req, res, next) => {
 
 const getListVideos = async (req, res, next) => {
     try {
-        const perPage = 15;
-        const { type, page } = req.query;
-        const [listVideos, videoCount] = await videoServices.getListVideos({
+        const currentUserId = req.currentUser?.sub;
+        const perPage = 4;
+        const { type, page, categoryId } = req.query;
+        const { listVideos, videoCount } = await videoServices.getListVideos({
             type,
+            categoryId: Number(categoryId),
             page,
             perPage,
+            currentUserId,
         });
 
         const data = listVideos.map((video) => {
@@ -173,6 +170,7 @@ const getListVideos = async (req, res, next) => {
                 pagination: {
                     total: videoCount,
                     per_page: perPage,
+                    count: listVideos.length,
                     total_pages: Math.ceil(videoCount / perPage),
                     current_page: Number(page),
                 },
@@ -184,23 +182,17 @@ const getListVideos = async (req, res, next) => {
 };
 
 const getVideo = async (req, res, next) => {
-    const { uuid } = req.params;
     try {
-        const video = await videoServices.getVideo(uuid);
-        const { size, width, height, duration, format } = video.meta;
-        const data = {
-            ...video.toJSON(),
-            meta: {
-                format,
-                size: Number(size),
-                width: Number(width),
-                height: Number(height),
-                duration: Number(duration),
-            },
-        };
-
+        const currentUserId = req.currentUser?.sub;
+        const { uuid } = req.params;
+        const { author: videoUsername } = req.query;
+        await videoServices.checkVideoWithUsername(videoUsername, uuid);
+        const videoData = await videoServices.getVideoWithCheckPrivacy(
+            uuid,
+            currentUserId
+        );
         res.status(StatusCodes.OK).json({
-            data,
+            data: videoData,
         });
     } catch (error) {
         next(error);
@@ -227,38 +219,560 @@ const removeExistFile = (req, res, next) => {
     }
 };
 
-const uploadVideoCover = (req, res, next) => {
-    imageMulterUpload(req, res, (err) => {
-        if (err instanceof multer.MulterError) {
-            next(new ApiError(422, err.message));
-            return;
-        } else if (err) {
-            next(new ApiError(422, err.message));
-            return;
+const likeVideo = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id: videoId } = req.params;
+        const { videoLink } = req.body;
+
+        await videoServices.likeVideo({
+            user_id: currentUserId,
+            likeable_id: videoId,
+            likeable_type: 'video',
+        });
+
+        const videoData = await videoServices.getVideo(
+            { id: videoId },
+            currentUserId
+        );
+
+        if (currentUserId !== videoData.user?.id) {
+            try {
+                const currentUserData =
+                    await userService.getCurrentUser(currentUserId);
+
+                const subject = {
+                    object_id: currentUserId,
+                    name: currentUserData.nickname,
+                    type: 'user',
+                    image_url: currentUserData.avatar?.sm,
+                    object_link: `/@${currentUserData.username}`,
+                };
+
+                const directObject = {
+                    object_id: videoData.id,
+                    uuid: videoData.uuid,
+                    name: videoData.description,
+                    type: 'video',
+                    image_url: videoData.thumb?.url,
+                    object_link: videoLink,
+                };
+
+                const [subjectResult, directObjectResult] =
+                    await notificationService.bulkCreateSubject([
+                        subject,
+                        directObject,
+                    ]);
+
+                const notificationData = {
+                    direct_object_id: directObjectResult[0].id,
+                    type: 'like_video',
+                    user_id: videoData.user?.id,
+                    unique_key: `like_video:video_${videoId}:user_${videoData.user?.id}`,
+                    is_read: false,
+                };
+
+                await notificationService.createNotification(
+                    notificationData,
+                    subjectResult[0].id
+                );
+
+                io.to(`user:${videoData.user?.id}`).emit('notification');
+            } catch (error) {
+                console.log('Error creating notification:', error);
+            }
         }
 
-        const { path } = req.file;
-
-        // //upload to cloud
-        uploadImageToCloud(path).then(([err, image]) => {
-            if (err) {
-                next(new ApiError(err.http_code, err.message));
-            } else {
-                res.json({
-                    message: 'upload image to cloudinary successfull!',
-                    data: image,
-                });
-            }
-            fs.unlinkSync(path);
+        res.status(StatusCodes.CREATED).json({
+            data: videoData,
         });
-    });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const unlikeVideo = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id: videoId } = req.params;
+
+        await videoServices.unlikeVideo({
+            user_id: currentUserId,
+            likeable_id: videoId,
+            likeable_type: 'video',
+        });
+
+        const videoData = await videoServices.getVideo(
+            { id: videoId },
+            currentUserId
+        );
+
+        res.status(StatusCodes.OK).json({
+            data: videoData,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const addVideoToFavorite = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id: videoId } = req.params;
+
+        await videoServices.addVideoToFavorite({
+            user_id: currentUserId,
+            video_id: videoId,
+        });
+
+        const videoData = await videoServices.getVideo(
+            { id: videoId },
+            currentUserId
+        );
+        res.status(StatusCodes.CREATED).json({
+            data: videoData,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const removeVideoFromFavorite = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id: videoId } = req.params;
+
+        await videoServices.removeVideoFromFavorite({
+            user_id: currentUserId,
+            video_id: videoId,
+        });
+
+        const videoData = await videoServices.getVideo(
+            { id: videoId },
+            currentUserId
+        );
+        res.status(StatusCodes.CREATED).json({
+            data: videoData,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const changePrivacy = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id } = req.params;
+        const { viewable } = req.body;
+        await videoServices.updateVideo(id, currentUserId, {
+            viewable,
+        });
+        const video = await videoServices.getVideo({ id }, currentUserId);
+        res.status(StatusCodes.OK).json({
+            data: video,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const shareVideoInChat = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { optionalMessage, sharedData, postId, conversationIds } =
+            req.body;
+        await videoServices.shareVideoInChat(
+            currentUserId,
+            optionalMessage,
+            sharedData,
+            postId,
+            conversationIds
+        );
+        const videoData = await videoServices.getVideo(
+            { id: postId },
+            currentUserId
+        );
+
+        const rooms = conversationIds.map((id) => `conversation:${id}`);
+        io.to(rooms).emit('shareVideoInChat', {
+            conversationIds,
+            exceptNotificationToId: currentUserId,
+        });
+
+        await chatService.bulkUpdateLastView(currentUserId, conversationIds);
+
+        res.status(StatusCodes.CREATED).json({
+            message: 'share success',
+            method: 'message',
+            conversation_id: conversationIds,
+            video_data: videoData,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const shareVideoToFriends = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const {
+            optionalMessage,
+            sharedData,
+            postId,
+            conversationIds,
+            userIds,
+        } = req.body;
+
+        const newConversationIds = await videoServices.shareVideoInChat(
+            currentUserId,
+            optionalMessage,
+            sharedData,
+            postId,
+            conversationIds,
+            userIds
+        );
+        const videoData = await videoServices.getVideo(
+            { id: postId },
+            currentUserId
+        );
+
+        const rooms = newConversationIds.map((id) => `conversation:${id}`);
+        io.to(rooms).emit('shareVideoInChat', {
+            conversationIds: newConversationIds,
+            exceptNotificationToId: currentUserId,
+        });
+
+        await chatService.bulkUpdateLastView(currentUserId, newConversationIds);
+
+        res.status(StatusCodes.CREATED).json({
+            message: 'share success',
+            method: 'message',
+            conversation_id: newConversationIds,
+            video_data: videoData,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const shareVideoByRepost = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { postId, caption } = req.body;
+        await videoServices.shareVideoByRepost(currentUserId, postId, caption);
+        const videoData = await videoServices.getVideo(
+            { id: postId },
+            currentUserId
+        );
+        res.status(StatusCodes.CREATED).json({
+            message: 'share success',
+            method: 'repost',
+            video_data: videoData,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const removeReposted = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id } = req.params;
+        const postId = Number(id);
+        await videoServices.removeReposted(currentUserId, postId);
+        const videoData = await videoServices.getVideo(
+            { id: postId },
+            currentUserId
+        );
+        res.status(StatusCodes.OK).json({
+            message: 'success',
+            video_data: videoData,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const addView = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { videoId, duration, lastViewAt, viewNumber, videoUserId } =
+            req.body;
+        if ((new Date() - new Date(lastViewAt)) / 1000 / 60 < 60) {
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                'Currently, cannot create new resources'
+            );
+        }
+
+        if (currentUserId === videoUserId) {
+            return res.status(StatusCodes.NO_CONTENT).json();
+        }
+
+        await videoServices.addView(
+            currentUserId,
+            videoId,
+            duration,
+            viewNumber
+        );
+        const videoData = await videoServices.getVideo(
+            { id: videoId },
+            currentUserId
+        );
+        res.status(StatusCodes.CREATED).json({
+            message: 'success',
+            data: videoData,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getFollowingsWithNewestVideos = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const perPage = 4;
+        const { page } = req.query;
+        const { listFollowingWithVideos, count } =
+            await videoServices.getFollowingsWithNewestVideos(
+                currentUserId,
+                page,
+                perPage
+            );
+        res.status(StatusCodes.OK).json({
+            data: listFollowingWithVideos,
+            meta: {
+                pagination: {
+                    total: count,
+                    per_page: perPage,
+                    count: listFollowingWithVideos.length,
+                    total_pages: Math.ceil(count / perPage),
+                    current_page: Number(page),
+                },
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getFriendsWithNewestVideos = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const perPage = 4;
+        const { page } = req.query;
+        const { listFollowingWithVideos, count } =
+            await videoServices.getFriendsWithNewestVideos(
+                currentUserId,
+                page,
+                perPage
+            );
+        res.status(StatusCodes.OK).json({
+            data: listFollowingWithVideos,
+            meta: {
+                pagination: {
+                    total: count,
+                    per_page: perPage,
+                    count: listFollowingWithVideos.length,
+                    total_pages: Math.ceil(count / perPage),
+                    current_page: Number(page),
+                },
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getVideoCategories = async (req, res, next) => {
+    try {
+        const { categories, count } = await videoServices.getVideoCategories();
+        res.status(StatusCodes.OK).json({
+            data: categories,
+            count,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getReportReasons = async (req, res, next) => {
+    try {
+        const { listReasons, count } = await videoServices.getReportReasons();
+        res.status(StatusCodes.OK).json({
+            data: listReasons,
+            count,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const report = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { objectId, objectType, reasonId } = req.body;
+        await videoServices.report(
+            currentUserId,
+            objectType,
+            objectId,
+            reasonId
+        );
+        res.status(StatusCodes.CREATED).json({
+            message: 'success',
+            data: {
+                object_id: objectId,
+                object_type: objectType,
+                is_reported: true,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const unreport = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id: objectId } = req.params;
+        const { type: objectType } = req.query;
+        await videoServices.unreport(currentUserId, objectId, objectType);
+        res.status(StatusCodes.OK).json({
+            message: 'success',
+            data: {
+                object_id: Number(objectId),
+                objectType,
+                is_reported: false,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const deleteVideo = async (req, res, next) => {
+    try {
+        //TODO: delete video and thumb on cloud
+        const currentUserId = req.currentUser?.sub;
+        const role = req.currentUser?.role;
+        const { id: videoId } = req.params;
+        const { authorId } = req.query;
+        if (role === ROLE.user && authorId === currentUserId) {
+            await videoServices.deleteVideo(videoId, currentUserId);
+        } else {
+            await videoServices.deleteVideo(videoId, authorId);
+        }
+        res.status(StatusCodes.OK).json({
+            message: 'success',
+            video_id: Number(videoId),
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const updateVideo = async (req, res, next) => {
+    try {
+        //TODO: delete video and thumb on cloud
+        const currentUserId = req.currentUser?.sub;
+        const role = req.currentUser?.role;
+        const { id: videoId } = req.params;
+        const { categoryId, description, allows } = req.body;
+        await videoServices.updateVideo(
+            videoId,
+            currentUserId,
+            { category_id: categoryId, description, allows },
+            role
+        );
+        res.status(StatusCodes.OK).json({
+            message: 'success',
+            video_id: Number(videoId),
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getMyListVideos = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { page, sortBy, sortType, q: searchStr, privacy } = req.query;
+        const perPage = 5;
+        let sortByField = sortBy;
+        switch (sortBy) {
+            case 'date':
+                sortByField = 'published_at';
+                break;
+            case 'privacy':
+                sortByField = 'viewable';
+                break;
+            case 'views':
+                sortByField = 'views_count';
+                break;
+            case 'likes':
+                sortByField = 'likes_count';
+                break;
+            case 'comments':
+                sortByField = 'comments_count';
+                break;
+            case 'shares':
+                sortByField = 'shares_count';
+                break;
+            default:
+                break;
+        }
+        const filter = {};
+        if (privacy) {
+            filter.viewable = privacy;
+        }
+        const { listVideos, count } = await videoServices.getMyListVideos(
+            currentUserId,
+            page,
+            perPage,
+            sortByField,
+            sortType,
+            searchStr,
+            filter
+        );
+        res.status(StatusCodes.OK).json({
+            data: listVideos,
+            meta: {
+                pagination: {
+                    total: count,
+                    per_page: perPage,
+                    total_pages: Math.ceil(count / perPage),
+                    current_page: Number(page),
+                },
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
 };
 
 export {
+    addView,
+    addVideoToFavorite,
     createNew,
-    uploadVideo,
-    uploadVideoCover,
-    removeExistFile,
+    changePrivacy,
+    deleteVideo,
     getListVideos,
     getVideo,
+    getFollowingsWithNewestVideos,
+    getFriendsWithNewestVideos,
+    getVideoCategories,
+    getReportReasons,
+    getMyListVideos,
+    likeVideo,
+    removeVideoFromFavorite,
+    removeReposted,
+    report,
+    removeExistFile,
+    shareVideoInChat,
+    shareVideoToFriends,
+    shareVideoByRepost,
+    unlikeVideo,
+    unreport,
+    uploadVideo,
+    updateVideo,
 };

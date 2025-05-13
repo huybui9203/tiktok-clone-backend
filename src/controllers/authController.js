@@ -5,7 +5,6 @@ import * as emailService from '~/services/emailService';
 import * as authService from '~/services/authService';
 import * as tokenService from '~/services/tokenService';
 import formatDate from '~/utils/formatDate';
-import { password } from '~/validations/customValidation';
 import { JWT_EXPIRES, jwtTypes } from '~/utils/constants';
 import redisClient from '~/config/connectionRedis';
 
@@ -74,12 +73,25 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
-        const user = await authService.loginWithEmailAndPassword(
-            email,
-            password
-        );
+        const { user, isAvailable, expiredTime } =
+            await authService.loginWithEmailAndPassword(email, password);
 
-        const tokens = await tokenService.generateAuthTokens(user.id);
+        if (!isAvailable) {
+            const data = {
+                status: user.status,
+                is_available: false,
+            };
+
+            if (expiredTime) {
+                data.expire = expiredTime;
+            }
+            return res.status(StatusCodes.OK).json(data);
+        }
+
+        const tokens = await tokenService.generateAuthTokens(
+            user.id,
+            user.role
+        );
 
         res.cookie('refresh_token', tokens.refresh_token, {
             httpOnly: true,
@@ -109,6 +121,14 @@ const resetPassword = async (req, res, next) => {
             throw new ApiError(StatusCodes.NOT_FOUND, 'Email not found');
         }
 
+        const result = await authService.getUserIfNotActive(user);
+        if (result) {
+            throw new ApiError(
+                StatusCodes.FORBIDDEN,
+                `Account ${result.user?.status}`
+            );
+        }
+
         await emailService.verifyOTPCode({
             otp,
             email,
@@ -116,7 +136,10 @@ const resetPassword = async (req, res, next) => {
 
         await userService.updateUserById(user.id, { newPassword: password });
 
-        const tokens = await tokenService.generateAuthTokens(user.id);
+        const tokens = await tokenService.generateAuthTokens(
+            user.id,
+            user.role
+        );
 
         res.cookie('refresh_token', tokens.refresh_token, {
             httpOnly: true,
@@ -139,18 +162,27 @@ const resetPassword = async (req, res, next) => {
 
 const getCurrentUser = async (req, res, next) => {
     try {
-        const token = req.get('Authorization')?.split(' ')[1];
-        if (!token) {
-            throw new ApiError(StatusCodes.UNAUTHORIZED, 'No token provided');
+        const currentUserId = req.currentUser?.sub;
+        const { user, isAvailable, expiredTime } =
+            await userService.getCurrentUser(currentUserId);
+
+        if (!isAvailable) {
+            res.clearCookie('refresh_token');
+            await redisClient.del(`refresh_token:${currentUserId}`);
+
+            const data = {
+                status: user.status,
+                is_available: false,
+            };
+
+            if (expiredTime) {
+                data.expire = expiredTime;
+            }
+            return res.status(StatusCodes.OK).json(data);
         }
 
-        const payload = tokenService.verifyToken(token, jwtTypes.ACCESS);
-
-        const user = await userService.getUserById(payload.sub);
-        const data = { ...user };
-        delete data.password;
         res.status(StatusCodes.OK).json({
-            data: data,
+            data: user,
             message: 'success',
         });
     } catch (error) {
@@ -160,15 +192,11 @@ const getCurrentUser = async (req, res, next) => {
 
 const logout = async (req, res, next) => {
     try {
-        const token = req.get('Authorization')?.split(' ')[1];
-        if (!token) {
-            throw new ApiError(StatusCodes.UNAUTHORIZED, 'No token provided');
-        }
+        //TODO: add token to blacklist when logout
 
-        const payload = tokenService.verifyToken(token, jwtTypes.ACCESS);
-
+        const currentUserId = req.currentUser?.sub;
         res.clearCookie('refresh_token');
-        await redisClient.del(`refresh_token:${payload.sub}`);
+        await redisClient.del(`refresh_token:${currentUserId}`);
 
         res.status(StatusCodes.NO_CONTENT).json();
     } catch (error) {
@@ -176,10 +204,11 @@ const logout = async (req, res, next) => {
     }
 };
 
-const refeshToken = async (req, res, next) => {
+const refreshToken = async (req, res, next) => {
     try {
         const { refresh_token: refreshToken } = req.cookies;
         if (!refreshToken) {
+            console.log('>>>>>>>>>>>', 'No token provided');
             throw new ApiError(StatusCodes.UNAUTHORIZED, 'No token provided');
         }
 
@@ -204,5 +233,5 @@ export {
     logout,
     resetPassword,
     getCurrentUser,
-    refeshToken,
+    refreshToken,
 };
