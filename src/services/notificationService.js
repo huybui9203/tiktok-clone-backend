@@ -343,7 +343,6 @@ export {
     createNotification,
     removeNotification,
     getNotifications,
-    getNotification,
     markAsReadOrUnRead,
     markAllAsRead,
     deleteNotification,

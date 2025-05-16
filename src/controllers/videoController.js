@@ -138,14 +138,33 @@ const createNew = async (req, res, next) => {
     }
 };
 
+const searchVideo = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { limit, q } = req.query;
+        const listVideos = await videoServices.searchVideo(
+            q,
+            Number(limit),
+            currentUserId
+        );
+        res.status(StatusCodes.OK).json({
+            data: listVideos,
+            count: limit,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 const getListVideos = async (req, res, next) => {
     try {
         const currentUserId = req.currentUser?.sub;
         const perPage = 4;
-        const { type, page, categoryId } = req.query;
+        const { type, page, categoryId, q } = req.query;
         const { listVideos, videoCount } = await videoServices.getListVideos({
             type,
             categoryId: Number(categoryId),
+            keyword: q,
             page,
             perPage,
             currentUserId,
@@ -596,27 +615,16 @@ const getVideoCategories = async (req, res, next) => {
     }
 };
 
-const getReportReasons = async (req, res, next) => {
-    try {
-        const { listReasons, count } = await videoServices.getReportReasons();
-        res.status(StatusCodes.OK).json({
-            data: listReasons,
-            count,
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
 const report = async (req, res, next) => {
     try {
         const currentUserId = req.currentUser?.sub;
-        const { objectId, objectType, reasonId } = req.body;
+        const { objectId, objectType, reasonId, ownerId } = req.body;
         await videoServices.report(
             currentUserId,
             objectType,
             objectId,
-            reasonId
+            reasonId,
+            ownerId
         );
         res.status(StatusCodes.CREATED).json({
             message: 'success',
@@ -761,7 +769,6 @@ export {
     getFollowingsWithNewestVideos,
     getFriendsWithNewestVideos,
     getVideoCategories,
-    getReportReasons,
     getMyListVideos,
     likeVideo,
     removeVideoFromFavorite,
@@ -775,4 +782,5 @@ export {
     unreport,
     uploadVideo,
     updateVideo,
+    searchVideo,
 };

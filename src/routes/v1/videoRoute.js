@@ -26,6 +26,8 @@ router.post('/upload', videoController.uploadVideo);
 
 router.get('/categories', authMiddleware, videoController.getVideoCategories);
 
+router.get('/search', authMiddleware, videoController.searchVideo);
+
 router.get(
     '/followings',
     authMiddleware,

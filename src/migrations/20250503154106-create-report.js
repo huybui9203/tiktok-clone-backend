@@ -50,9 +50,20 @@ module.exports = {
                 allowNull: false,
                 type: Sequelize.DATE,
             },
+            owner_id: {
+                type: Sequelize.INTEGER,
+                allowNull: true,
+            },
         });
     },
     async down(queryInterface, Sequelize) {
         await queryInterface.dropTable('Reports');
+    },
+
+    async up(queryInterface, Sequelize) {
+        await queryInterface.addColumn('Reports', 'owner_id', {
+            type: Sequelize.INTEGER,
+            allowNull: true,
+        });
     },
 };

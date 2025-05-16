@@ -30,7 +30,7 @@ const getNotifications = async (req, res, next) => {
                             ? null
                             : {
                                   last_time: new Date(
-                                      listNotifications.at(-1)?.createdAt
+                                      listNotifications.at(-1)?.updatedAt
                                   ).getTime(),
                                   last_id: listNotifications.at(-1)?.id,
                               },

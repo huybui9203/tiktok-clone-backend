@@ -186,6 +186,11 @@ const getReportDetail = async (reportId, type) => {
                 attributes: ['id', 'username'],
             },
             {
+                model: db.User,
+                as: 'owner',
+                attributes: ['id', 'username'],
+            },
+            {
                 model: db.Report_reason,
                 as: 'reason',
                 attributes: { exclude: ['createdAt', 'updatedAt'] },

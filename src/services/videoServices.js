@@ -76,23 +76,68 @@ const getListPosts = async ({ page = 1, perPage, currentUserId }) => {
     return { listVideos, videoCount: videoCount[0]?.count };
 };
 
+const searchVideo = async (keyword, limit, currentUserId) => {
+    const listVideos = await db.Video.findAll({
+        where: {
+            description: {
+                [Op.substring]: keyword,
+            },
+            status: 'approved',
+            [Op.or]: [
+                { user_id: currentUserId },
+                { viewable: 'public' },
+                {
+                    [Op.and]: [
+                        { viewable: { [Op.eq]: 'friends' } },
+                        db.sequelize.literal(
+                            `exists (select * from Follows as f1 join Follows as f2 
+                            on f1.follower_id = f2.following_id and f1.following_id = f2.follower_id
+                            where f1.follower_id = ${currentUserId} and f1.following_id = Video.user_id)`
+                        ),
+                    ],
+                },
+            ],
+        },
+        include: [
+            { model: db.User, as: 'user', attributes: ['id', 'username'] },
+        ],
+        attributes: ['id', 'uuid', 'description', 'thumb'],
+        limit,
+        order: [
+            ['views_count', 'DESC'],
+            ['likes_count', 'DESC'],
+            ['comments_count', 'DESC'],
+            ['shares_count', 'DESC'],
+        ],
+    });
+
+    return listVideos;
+};
+
 const getListVideos = async ({
     type = 'for-you',
     categoryId,
+    keyword,
     page = 1,
     perPage,
     currentUserId,
 }) => {
     try {
-        let categoryCondition = {};
+        let moreCondition = {};
         if (categoryId && categoryId !== 0) {
             //categoryId = 0 ~ 'All'
-            categoryCondition = { category_id: categoryId };
+            moreCondition = { category_id: categoryId };
+        } else if (keyword) {
+            moreCondition = {
+                description: {
+                    [Op.substring]: keyword,
+                },
+            };
         }
 
         const conditions = currentUserId
             ? {
-                  ...categoryCondition,
+                  ...moreCondition,
                   status: 'approved',
                   [Op.or]: [
                       { user_id: currentUserId },
@@ -110,7 +155,7 @@ const getListVideos = async ({
                       },
                   ],
               }
-            : { ...categoryCondition, viewable: 'public' };
+            : { ...moreCondition, viewable: 'public' };
         const subQueries = {
             isFollowed: `EXISTS (SELECT 1 FROM Follows WHERE Follows.following_id = user.id AND Follows.follower_id = ${currentUserId || -1})`,
             isLiked: `EXISTS (SELECT 1 FROM Likes WHERE Likes.likeable_type = 'video' && Likes.likeable_id = Video.id AND Likes.user_id = ${currentUserId || -1})`,
@@ -1097,23 +1142,19 @@ const getVideoCategories = async () => {
     return { categories, count };
 };
 
-const getReportReasons = async () => {
-    const { rows: listReasons, count } = await db.Report_reason.findAndCountAll(
-        {
-            attributes: {
-                exclude: ['createdAt', 'updatedAt'],
-            },
-        }
-    );
-    return { listReasons, count };
-};
-
-const report = async (currentUserId, objectType, objectId, reasonId) => {
+const report = async (
+    currentUserId,
+    objectType,
+    objectId,
+    reasonId,
+    ownerId
+) => {
     await db.Report.create({
         user_id: currentUserId,
         reportable_type: objectType,
         reportable_id: objectId,
         reason_id: reasonId,
+        owner_id: ownerId,
     });
 };
 
@@ -1250,10 +1291,10 @@ export {
     shareVideoByRepost,
     addView,
     removeReposted,
+    searchVideo,
     getFollowingsWithNewestVideos,
     getFriendsWithNewestVideos,
     getVideoCategories,
-    getReportReasons,
     report,
     unreport,
     deleteVideo,

@@ -10,6 +10,12 @@ module.exports = (sequelize, DataTypes) => {
                 onDelete: 'CASCADE',
             });
 
+            Report.belongsTo(models.User, {
+                foreignKey: 'owner_id',
+                targetKey: 'id',
+                as: 'owner',
+            });
+
             Report.belongsTo(models.Video, {
                 foreignKey: 'reportable_id',
                 targetKey: 'id',
@@ -45,6 +51,7 @@ module.exports = (sequelize, DataTypes) => {
             reason_id: DataTypes.INTEGER,
             is_resolved: DataTypes.BOOLEAN,
             action: DataTypes.ENUM('not', 'delete', 'keep'),
+            owner_id: DataTypes.INTEGER,
         },
         {
             sequelize,

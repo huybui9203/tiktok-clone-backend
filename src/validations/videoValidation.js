@@ -105,6 +105,7 @@ const report = async (req, res, next) => {
             .valid('user', 'video', 'comment', 'group')
             .required(),
         reasonId: Joi.number().integer().required(),
+        ownerId: Joi.number().integer().required(),
     });
     validate(schema, req.body)
         .then(() => {
