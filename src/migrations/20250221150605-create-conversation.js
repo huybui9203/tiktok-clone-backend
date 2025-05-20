@@ -62,6 +62,10 @@ module.exports = {
         //     onDelete: 'SET NULL',
         // });
 
-        await queryInterface.removeColumn('Conversations', 'is_group');
+        // await queryInterface.addColumn('Conversations', 'approve_mem', {
+        //     allowNull: false,
+        //     defaultValue: false,
+        //     type: Sequelize.BOOLEAN,
+        // });
     },
 };

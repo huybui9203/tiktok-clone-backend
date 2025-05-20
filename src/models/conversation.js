@@ -48,6 +48,7 @@ module.exports = (sequelize, DataTypes) => {
             avatar: DataTypes.JSON,
             last_msg_id: DataTypes.INTEGER,
             type: DataTypes.ENUM('self', 'direct', 'group'),
+            approve_mem: DataTypes.BOOLEAN,
         },
         {
             sequelize,

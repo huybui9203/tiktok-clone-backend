@@ -52,6 +52,19 @@ module.exports = {
                     allowNull: false,
                     type: Sequelize.DATE,
                 },
+                role: {
+                    allowNull: false,
+                    defaultValue: 'member',
+                    type: Sequelize.ENUM('creator', 'admin', 'member'),
+                },
+                status: {
+                    allowNull: false,
+                    defaultValue: 'pending',
+                    type: Sequelize.ENUM('pending', 'approved'),
+                },
+                add_by: {
+                    type: Sequelize.INTEGER,
+                },
             },
             {
                 uniqueKeys: {
@@ -67,14 +80,6 @@ module.exports = {
     },
 
     async up(queryInterface, Sequelize) {
-        await queryInterface.addColumn(
-            'Conversation_members',
-            'last_viewed_at',
-            {
-                allowNull: true,
-                type: Sequelize.DATE,
-            }
-        );
         // await queryInterface.addColumn('Conversation_members', 'last_seen_id', {
         //     allowNull: true,
         //     type: Sequelize.INTEGER,
@@ -84,5 +89,9 @@ module.exports = {
         //     },
         //     onDelete: 'set null',
         // });
+
+        await queryInterface.addColumn('Conversation_members', 'add_by', {
+            type: Sequelize.INTEGER,
+        });
     },
 };

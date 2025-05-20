@@ -1,5 +1,6 @@
 import { ReasonPhrases, StatusCodes } from 'http-status-codes';
 import { Op, QueryTypes } from 'sequelize';
+import { ROLE } from '~/config/roles';
 import db from '~/models';
 import ApiError from '~/utils/ApiError';
 import { destroy } from '~/utils/customSequelizeMethods';
@@ -45,6 +46,10 @@ const sendMessage = async ({
                         {
                             conversation_id: conversation.id,
                             user_id: senderId,
+                            last_viewed_at: new Date(),
+                            role: 'creator',
+                            status: 'approved',
+                            add_by: senderId,
                         },
                         { transaction: t }
                     );
@@ -54,10 +59,17 @@ const sendMessage = async ({
                         {
                             conversation_id: conversation.id,
                             user_id: senderId,
+                            last_viewed_at: new Date(),
+                            role: 'creator',
+                            status: 'approved',
+                            add_by: senderId,
                         },
                         ...receiverId.map((id) => ({
                             conversation_id: conversation.id,
                             user_id: id,
+                            role: 'member',
+                            status: 'approved',
+                            add_by: senderId,
                         })),
                     ],
                     { transaction: t }
@@ -189,7 +201,16 @@ const sendMessage = async ({
 const unsendMessage = async (messageId, currentUserId) => {
     //check user has permission delete
     const message = await db.Message.findByPk(messageId);
-    if (message?.sender_id !== currentUserId) {
+
+    const [currRole, senderRole] = await Promise.all([
+        checkGroupAdmin(message?.conversation_id, currentUserId, true),
+        checkGroupAdmin(message?.conversation_id, message?.sender_id, true),
+    ]);
+
+    if (
+        (currRole === 'member' && message?.sender_id !== currentUserId) ||
+        (currRole === 'admin' && senderRole === 'creator')
+    ) {
         throw new ApiError(
             StatusCodes.FORBIDDEN,
             `You don't have permission to access this resource`
@@ -712,12 +733,13 @@ const getConversationNameAndMemberCount = async (
                             (select count(*) from Conversation_members as cm where cm.conversation_id = Conversation.id) = 1
                             then (select us.nickname from Conversation_members as cm join Users as us on 
                             cm.user_id = us.id where cm.conversation_id = Conversation.id 
-                            and cm.user_id = ${currentUserId})
+                            and cm.user_id = ${currentUserId} and cm.status = 'approved')
 
                             when Conversation.name is null then (select group_concat(sub.nickname separator ', ') 
                             from (select us.nickname from Conversation_members as cm join Users as us on 
                             cm.user_id = us.id where cm.conversation_id = Conversation.id 
-                            and cm.user_id != ${currentUserId} limit ${LIMIT_NAMES_COUNT}) as sub) 
+                            and cm.user_id != ${currentUserId} and cm.status = 'approved' 
+                            limit ${LIMIT_NAMES_COUNT}) as sub) 
 
                             else Conversation.name
                         END
@@ -731,11 +753,11 @@ const getConversationNameAndMemberCount = async (
                         (select count(*) from Conversation_members as cm where cm.conversation_id = Conversation.id) = 1 
                         then (select group_concat(COALESCE(json_extract(sub.avatar, '$.sm'), '') separator ' ') 
                         from (select us.avatar from Conversation_members as cm join Users as us on cm.user_id = us.id 
-                        where cm.conversation_id = Conversation.id and cm.user_id = ${currentUserId}) as sub) 
+                        where cm.conversation_id = Conversation.id and cm.user_id = ${currentUserId} and cm.status = 'approved') as sub) 
 
                         when Conversation.avatar is null then (select group_concat(COALESCE(json_extract(sub.avatar, '$.sm'), '') separator ' ') 
                         from (select us.avatar from Conversation_members as cm join Users as us on cm.user_id = us.id 
-                        where cm.conversation_id = Conversation.id and cm.user_id != ${currentUserId} limit 2) as sub) 
+                        where cm.conversation_id = Conversation.id and cm.user_id != ${currentUserId} and cm.status = 'approved' limit 2) as sub) 
                         
                         else json_extract(Conversation.avatar, '$.url')
                     END
@@ -745,7 +767,7 @@ const getConversationNameAndMemberCount = async (
             [
                 db.sequelize.literal(`
                         (select count(*) from Conversation_members as cm
-                        where cm.conversation_id = Conversation.id)   
+                        where cm.conversation_id = Conversation.id and status = 'approved')   
                     `),
                 'members_count',
             ],
@@ -779,6 +801,7 @@ const getListConversations = async (currentUserId, page, perPage) => {
                 'creator_id',
                 'type',
                 'createdAt',
+                'approve_mem',
                 [
                     db.sequelize.literal(
                         `json_extract(Conversation.avatar, '$.public_id')`
@@ -792,12 +815,13 @@ const getListConversations = async (currentUserId, page, perPage) => {
                             (select count(*) from Conversation_members as cm where cm.conversation_id = Conversation.id) = 1
                             then (select us.nickname from Conversation_members as cm join Users as us on 
                             cm.user_id = us.id where cm.conversation_id = Conversation.id 
-                            and cm.user_id = ${currentUserId})
+                            and cm.user_id = ${currentUserId} and cm.status = 'approved')
 
                             when Conversation.name is null then (select group_concat(sub.nickname separator ', ') 
                             from (select us.nickname from Conversation_members as cm join Users as us on 
                             cm.user_id = us.id where cm.conversation_id = Conversation.id 
-                            and cm.user_id != ${currentUserId} limit ${LIMIT_NAMES_COUNT}) as sub) 
+                            and cm.user_id != ${currentUserId} and cm.status = 'approved' 
+                            limit ${LIMIT_NAMES_COUNT}) as sub) 
 
                             else Conversation.name
                         END
@@ -811,11 +835,11 @@ const getListConversations = async (currentUserId, page, perPage) => {
                             (select count(*) from Conversation_members as cm where cm.conversation_id = Conversation.id) = 1 
                             then (select group_concat(COALESCE(json_extract(sub.avatar, '$.sm'), '') separator ' ') 
                             from (select us.avatar from Conversation_members as cm join Users as us on cm.user_id = us.id 
-                            where cm.conversation_id = Conversation.id and cm.user_id = ${currentUserId}) as sub) 
+                            where cm.conversation_id = Conversation.id and cm.user_id = ${currentUserId} and cm.status = 'approved') as sub) 
 
                             when Conversation.avatar is null then (select group_concat(COALESCE(json_extract(sub.avatar, '$.sm'), '') separator ' ') 
                             from (select us.avatar from Conversation_members as cm join Users as us on cm.user_id = us.id 
-                            where cm.conversation_id = Conversation.id and cm.user_id != ${currentUserId} limit 2) as sub) 
+                            where cm.conversation_id = Conversation.id and cm.user_id != ${currentUserId} and cm.status = 'approved' limit 2) as sub) 
                             
                             else json_extract(Conversation.avatar, '$.url')
                         END
@@ -825,7 +849,7 @@ const getListConversations = async (currentUserId, page, perPage) => {
                 [
                     db.sequelize.literal(`
                         (select count(*) from Conversation_members as cm
-                        where cm.conversation_id = Conversation.id)   
+                        where cm.conversation_id = Conversation.id and cm.status = 'approved')   
                     `),
                     'members_count',
                 ],
@@ -875,7 +899,7 @@ const getListConversations = async (currentUserId, page, perPage) => {
             where: {
                 id: {
                     [Op.in]: db.sequelize.literal(
-                        `(select conversation_id from Conversation_members where user_id = ${currentUserId || -1})`
+                        `(select conversation_id from Conversation_members where user_id = ${currentUserId || -1} and status = 'approved')`
                     ),
                 },
             },
@@ -912,6 +936,7 @@ const getListConversations = async (currentUserId, page, perPage) => {
                 avatar,
                 type,
                 createdAt,
+                approve_mem,
                 public_avt_id,
                 last_message,
                 members_count,
@@ -932,6 +957,7 @@ const getListConversations = async (currentUserId, page, perPage) => {
                 avatar: groupAvatar,
                 type,
                 members_count,
+                approve_mem: !!approve_mem,
                 createdAt,
                 public_avt_id,
                 is_viewed:
@@ -1201,6 +1227,7 @@ const getListMemberOfConversation = async (
             where: {
                 [Op.and]: [
                     { conversation_id: conversationId },
+                    { status: 'approved' },
                     {
                         [Op.or]: [
                             db.sequelize.literal(
@@ -1215,25 +1242,10 @@ const getListMemberOfConversation = async (
             },
             attributes: {
                 exclude: ['updatedAt'],
-                include: [
-                    'id',
-                    'createdAt',
-                    [
-                        db.sequelize.literal(
-                            "CASE WHEN Conversation_member.user_id = conversation.creator_id THEN 'creator' ELSE 'member' END"
-                        ),
-                        'role',
-                    ],
-                ],
+                include: ['id', 'createdAt', 'role'],
             },
 
             include: [
-                {
-                    model: db.Conversation,
-                    as: 'conversation',
-                    attributes: [],
-                },
-
                 {
                     model: db.User,
                     as: 'user',
@@ -1248,12 +1260,19 @@ const getListMemberOfConversation = async (
                         ],
                     ],
                 },
+                {
+                    model: db.User,
+                    as: 'add_by_member',
+                    attributes: ['id', 'nickname'],
+                },
             ],
 
             order: [
                 [
                     db.sequelize.literal(
-                        `CASE WHEN Conversation_member.user_id = conversation.creator_id THEN 0 ELSE 1 END`
+                        `CASE WHEN Conversation_member.role = 'creator' THEN 0
+                         WHEN Conversation_member.role = 'admin' THEN 1 
+                         ELSE 2 END`
                     ),
                     'ASC',
                 ],
@@ -1266,6 +1285,7 @@ const getListMemberOfConversation = async (
         db.Conversation_member.count({
             where: {
                 conversation_id: conversationId,
+                status: 'approved',
             },
         }),
     ]);
@@ -1386,14 +1406,12 @@ const getMember = async (currentUserId, conversationId) => {
     };
 };
 
-const customizeConversation = async (conversationId, data, type) => {
-    if (type === 'name_avt') {
-        await db.Conversation.update(data, {
-            where: {
-                id: conversationId,
-            },
-        });
-    }
+const customizeConversation = async (conversationId, data) => {
+    await db.Conversation.update(data, {
+        where: {
+            id: conversationId,
+        },
+    });
 };
 
 const getSuggestedUsers = async (
@@ -1407,14 +1425,15 @@ const getSuggestedUsers = async (
         isFriend: `exists (select 1 from Follows as f1 join Follows as f2
                     on f1.follower_id = f2.following_id and f1.following_id = f2.follower_id 
                     where f1.follower_id = ${currentUserId || -1} and f1.following_id = User.id)`,
-        isNotMember: `not exists (select 1 from Conversation_members as cm where cm.user_id = User.id
+        isNotMemberOrPending: `not exists (select 1 from Conversation_members as cm where cm.user_id = User.id
                     and cm.conversation_id = ${conversationId})`,
     };
     const { rows: listSuggested, count } = await db.User.findAndCountAll({
         where: {
             [Op.and]: [
+                { role: ROLE.user },
                 { nickname: { [Op.substring]: searchStr } },
-                db.sequelize.literal(queries.isNotMember),
+                db.sequelize.literal(queries.isNotMemberOrPending),
             ],
         },
         attributes: [
@@ -1434,21 +1453,39 @@ const getSuggestedUsers = async (
 };
 
 const addMembers = async (conversationId, currentUserId, memberIds) => {
-    const hasPermission = await db.Conversation.findOne({
-        id: conversationId,
-        creator_id: currentUserId,
+    const currentUser = await db.Conversation_member.findOne({
+        where: {
+            conversation_id: conversationId,
+            user_id: currentUserId,
+        },
+        include: [{ model: db.Conversation, as: 'conversation' }],
     });
-    if (!hasPermission) {
+
+    if (!currentUser) {
         throw new ApiError(
             StatusCodes.FORBIDDEN,
-            `You don't have permission to change resource`
+            `You don't have permission to access the resource`
         );
     }
+
+    const isApproveMember = currentUser.conversation?.approve_mem;
+    const isAdmin =
+        currentUser.role === 'creator' || currentUser.role === 'admin';
+    const status = isApproveMember
+        ? isAdmin
+            ? 'approved'
+            : 'pending'
+        : 'approved';
     await db.Conversation_member.bulkCreate(
         memberIds.map((userId) => ({
             user_id: userId,
             conversation_id: conversationId,
-            last_viewed_at: new Date(),
+            role:
+                currentUser.conversation?.creator_id === userId
+                    ? 'creator'
+                    : 'member',
+            status,
+            add_by: currentUserId,
         }))
     );
 };
@@ -1463,11 +1500,9 @@ const leaveConversation = async (conversationId, currentUserId, memberIds) => {
         });
         return;
     }
-    const hasPermission = await db.Conversation.findOne({
-        id: conversationId,
-        creator_id: currentUserId,
-    });
-    if (!hasPermission) {
+    const isAdmin = await checkGroupAdmin(conversationId, currentUserId);
+
+    if (!isAdmin) {
         throw new ApiError(
             StatusCodes.FORBIDDEN,
             `You don't have permission to change resource`
@@ -1477,9 +1512,204 @@ const leaveConversation = async (conversationId, currentUserId, memberIds) => {
         where: {
             user_id: memberIds,
             conversation_id: conversationId,
+            role: ['member', 'admin'],
         },
     });
 };
+
+const getGroupRole = async (currentUserId, conversationId) => {
+    const member = await db.Conversation_member.findOne({
+        where: {
+            conversation_id: conversationId,
+            user_id: currentUserId,
+        },
+    });
+    if (!member) {
+        throw new ApiError(StatusCodes.NOT_FOUND, 'Member not found');
+    }
+    return member.role;
+};
+
+const checkGroupAdmin = async (conversationId, userId, getRole = false) => {
+    const currentUser = await db.Conversation_member.findOne({
+        where: {
+            conversation_id: conversationId,
+            user_id: userId,
+        },
+    });
+
+    if (!currentUser) {
+        throw new ApiError(StatusCodes.NOT_FOUND, 'Member not found');
+    }
+
+    if (getRole) {
+        return currentUser.role;
+    }
+
+    const isAdmin =
+        currentUser.role === 'creator' || currentUser.role === 'admin';
+    return isAdmin;
+};
+
+const getMemberRequests = async (
+    lastTime,
+    lastId,
+    conversationId,
+    perPage,
+    currentUserId
+) => {
+    const isAdmin = await checkGroupAdmin(conversationId, currentUserId);
+    const addConditions = {};
+    if (!isAdmin) {
+        addConditions.add_by = currentUserId;
+    }
+
+    const newLastId =
+        lastId === undefined
+            ? (await db.Attachment.max('id')) + 100000
+            : Number(lastId);
+
+    const [listRequests, count] = await Promise.all([
+        db.Conversation_member.findAll({
+            where: {
+                [Op.and]: [
+                    { conversation_id: conversationId },
+                    { status: 'pending' },
+                    addConditions,
+                    {
+                        [Op.or]: [
+                            db.sequelize.literal(
+                                `Conversation_member.createdAt < '${lastTime}'`
+                            ),
+                            db.sequelize.literal(
+                                `(Conversation_member.createdAt = '${lastTime}' and Conversation_member.id < ${newLastId})`
+                            ),
+                        ],
+                    },
+                ],
+            },
+            attributes: {
+                exclude: ['updatedAt'],
+                include: ['id', 'createdAt', 'role'],
+            },
+
+            include: [
+                {
+                    model: db.User,
+                    as: 'user',
+                    attributes: [
+                        'nickname',
+                        'username',
+                        [
+                            db.sequelize.literal(
+                                `JSON_EXTRACT(user.avatar, '$.sm')`
+                            ),
+                            'avatar_url',
+                        ],
+                    ],
+                },
+
+                {
+                    model: db.User,
+                    as: 'add_by_member',
+                    attributes: ['id', 'nickname'],
+                },
+            ],
+            order: [
+                ['createdAt', 'DESC'],
+                ['id', 'DESC'],
+            ],
+            limit: perPage,
+        }),
+
+        db.Conversation_member.count({
+            where: {
+                conversation_id: conversationId,
+                status: 'pending',
+                ...addConditions,
+            },
+        }),
+    ]);
+
+    return { listRequests, count };
+};
+
+const approveMember = async (conversationId, currentUserId, memberId) => {
+    const isAdmin = await checkGroupAdmin(conversationId, currentUserId);
+
+    if (!isAdmin) {
+        throw new ApiError(StatusCodes.FORBIDDEN, 'Forbidden');
+    }
+
+    await db.Conversation_member.update(
+        {
+            status: 'approved',
+        },
+        {
+            where: {
+                id: memberId,
+            },
+        }
+    );
+};
+
+const declineMember = async (conversationId, currentUserId, memberId) => {
+    const isAdmin = await checkGroupAdmin(conversationId, currentUserId);
+
+    if (!isAdmin) {
+        throw new ApiError(StatusCodes.FORBIDDEN, 'Forbidden');
+    }
+
+    await db.Conversation_member.destroy({
+        where: {
+            id: memberId,
+        },
+    });
+};
+
+const makeOrRemoveAdmin = async (
+    conversationId,
+    currentUserId,
+    memberId,
+    type
+) => {
+    const isAdmin = await checkGroupAdmin(conversationId, currentUserId);
+
+    if (!isAdmin) {
+        throw new ApiError(StatusCodes.FORBIDDEN, 'Forbidden');
+    }
+
+    let role;
+    if (type === 'makeAdmin') {
+        role = 'admin';
+    } else if (type === 'removeAsAdmin') {
+        role = 'member';
+    } else {
+        throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid type');
+    }
+    await db.Conversation_member.update(
+        {
+            role,
+        },
+        {
+            where: {
+                conversation_id: conversationId,
+                user_id: memberId,
+                role: ['member', 'admin'],
+            },
+        }
+    );
+};
+
+const deleteConversation = async (conversationId, currentUserId) => {
+    await destroy(db.Conversation, {
+        where: {
+            id: conversationId,
+            creator_id: currentUserId,
+        },
+    });
+};
+
 export {
     createAttachments,
     sendMessage,
@@ -1504,4 +1734,10 @@ export {
     addMembers,
     leaveConversation,
     getConversationNameAndMemberCount,
+    getGroupRole,
+    getMemberRequests,
+    approveMember,
+    declineMember,
+    makeOrRemoveAdmin,
+    deleteConversation,
 };

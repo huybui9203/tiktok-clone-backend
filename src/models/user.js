@@ -114,6 +114,10 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: 'user_id',
                 as: 'reported',
             });
+
+            User.hasMany(models.Conversation_member, {
+                foreignKey: 'add_by',
+            });
         }
     }
     User.init(

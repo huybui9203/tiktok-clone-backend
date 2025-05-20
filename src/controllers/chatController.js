@@ -615,6 +615,45 @@ const getListAttachmentsOfConversation = async (req, res, next) => {
     }
 };
 
+const getListMemberRequests = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { lastTime, lastId } = req.query;
+        const { id: conversationId } = req.params;
+        const perPage = 15;
+        const dateTimeValue = formatDate(Number(lastTime));
+
+        const { listRequests, count } = await chatService.getMemberRequests(
+            dateTimeValue,
+            lastId,
+            Number(conversationId),
+            perPage,
+            currentUserId
+        );
+
+        res.status(StatusCodes.OK).json({
+            data: listRequests,
+            meta: {
+                pagination: {
+                    total: count,
+                    per_page: perPage,
+                    next_cursor:
+                        listRequests.length < perPage
+                            ? null
+                            : {
+                                  last_time: new Date(
+                                      listRequests.at(-1)?.createdAt
+                                  ).getTime(),
+                                  last_id: listRequests.at(-1)?.id,
+                              },
+                },
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 const getListMembersOfConversation = async (req, res, next) => {
     try {
         const { lastTime, lastId } = req.query;
@@ -718,51 +757,51 @@ const customizeConversation = async (req, res, next) => {
     try {
         const currentUserId = req.currentUser?.sub;
         const { id } = req.params;
-        const { name, publicId, type } = req.body;
+        const { name, publicId, type, isApproveMember } = req.body;
         const avatar_url = req.filePath;
 
         let updateData = {};
-        if (avatar_url) {
-            const uploadImage = async () => {
-                const [error, image] =
-                    await uploadChatAvatarToCloud(avatar_url);
-                fs.unlinkSync(avatar_url);
-                if (error) {
-                    throw new ApiError(
-                        StatusCodes.INTERNAL_SERVER_ERROR,
-                        error.message
-                    );
-                }
-                return {
-                    url: image.secure_url,
-                    public_id: image.public_id,
+        if (type === 'name_avt') {
+            if (avatar_url) {
+                const uploadImage = async () => {
+                    const [error, image] =
+                        await uploadChatAvatarToCloud(avatar_url);
+                    fs.unlinkSync(avatar_url);
+                    if (error) {
+                        throw new ApiError(
+                            StatusCodes.INTERNAL_SERVER_ERROR,
+                            error.message
+                        );
+                    }
+                    return {
+                        url: image.secure_url,
+                        public_id: image.public_id,
+                    };
                 };
-            };
 
-            const destroyOldImage = async () => {
-                if (publicId) {
-                    await destroyImage(publicId);
-                }
-            };
+                const destroyOldImage = async () => {
+                    if (publicId) {
+                        await destroyImage(publicId);
+                    }
+                };
 
-            const [avatar] = await Promise.all([
-                uploadImage(),
-                destroyOldImage(),
-            ]);
+                const [avatar] = await Promise.all([
+                    uploadImage(),
+                    destroyOldImage(),
+                ]);
 
-            updateData.avatar = avatar;
-        }
+                updateData.avatar = avatar;
+            }
 
-        if (name) {
-            updateData.name = name;
+            if (name) {
+                updateData.name = name;
+            }
+        } else if (type === 'set_approve_mem') {
+            updateData.approve_mem = isApproveMember;
         }
 
         const conversationId = Number(id);
-        await chatService.customizeConversation(
-            conversationId,
-            updateData,
-            type
-        );
+        await chatService.customizeConversation(conversationId, updateData);
 
         res.status(StatusCodes.OK).json({
             data: updateData,
@@ -864,6 +903,150 @@ const leaveConversation = async (req, res, next) => {
     }
 };
 
+const getGroupRole = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id } = req.params;
+        const conversationId = Number(id);
+        const role = await chatService.getGroupRole(
+            currentUserId,
+            conversationId
+        );
+        res.status(StatusCodes.OK).json({
+            data: {
+                user_id: currentUserId,
+                conversation_id: conversationId,
+                role,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const approveMember = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id } = req.params;
+        const { memberId } = req.body;
+        const conversationId = Number(id);
+        await chatService.approveMember(
+            conversationId,
+            currentUserId,
+            memberId
+        );
+        const { name, members_count, avatar } =
+            await chatService.getConversationNameAndMemberCount(
+                currentUserId,
+                conversationId
+            );
+
+        res.status(StatusCodes.CREATED).json({
+            message: 'success',
+            data: {
+                name,
+                avatar,
+                members_count,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const declineMember = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id, memberId } = req.params;
+        const conversationId = Number(id);
+        await chatService.declineMember(
+            conversationId,
+            currentUserId,
+            memberId
+        );
+        res.status(StatusCodes.OK).json({
+            message: 'success',
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const makeAdmin = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id } = req.params;
+        const { memberId } = req.body;
+        const conversationId = Number(id);
+        await chatService.makeOrRemoveAdmin(
+            conversationId,
+            currentUserId,
+            memberId,
+            'makeAdmin'
+        );
+
+        io.to(`conversation:${conversationId}`).emit('makeGroupChatAdmin', {
+            conversationId,
+        });
+
+        io.to(`user:${memberId}`).emit('changeAdmin', {
+            conversationId,
+        });
+
+        res.status(StatusCodes.OK).json({
+            message: 'success',
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const removeAsAdmin = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id } = req.params;
+        const { memberId } = req.body;
+        const conversationId = Number(id);
+        await chatService.makeOrRemoveAdmin(
+            conversationId,
+            currentUserId,
+            memberId,
+            'removeAsAdmin'
+        );
+
+        io.to(`conversation:${conversationId}`).emit('makeGroupChatAdmin', {
+            conversationId,
+        });
+
+        io.to(`user:${memberId}`).emit('changeAdmin', {
+            conversationId,
+        });
+
+        res.status(StatusCodes.OK).json({
+            message: 'success',
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const deleteConversation = async (req, res, next) => {
+    try {
+        const currentUserId = req.currentUser?.sub;
+        const { id } = req.params;
+        const conversationId = Number(id);
+        await chatService.deleteConversation(conversationId, currentUserId);
+        res.status(StatusCodes.OK).json({
+            message: 'success',
+            data: {
+                conversation_id: conversationId,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export {
     sendMessage,
     unsendMessage,
@@ -883,4 +1066,11 @@ export {
     getSuggestedUsers,
     addMembers,
     leaveConversation,
+    getGroupRole,
+    getListMemberRequests,
+    approveMember,
+    declineMember,
+    makeAdmin,
+    removeAsAdmin,
+    deleteConversation,
 };

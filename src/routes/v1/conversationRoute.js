@@ -28,6 +28,41 @@ router.get(
     chatController.getListMembersOfConversation
 );
 
+router.get(
+    '/:id/member-requests',
+    authMiddleware,
+    chatValidation.getListByCursor,
+    chatController.getListMemberRequests
+);
+
+router.patch(
+    '/:id/make-admin',
+    authMiddleware,
+    chatValidation.approveMember,
+    chatController.makeAdmin
+);
+
+router.patch(
+    '/:id/remove-as-admin',
+    authMiddleware,
+    chatValidation.approveMember,
+    chatController.removeAsAdmin
+);
+
+router.patch(
+    '/:id/approve-member',
+    authMiddleware,
+    chatValidation.approveMember,
+    chatController.approveMember
+);
+
+router.delete(
+    '/:id/decline-member/:memberId',
+    authMiddleware,
+    chatValidation.declineMember,
+    chatController.declineMember
+);
+
 router.patch(
     '/:id/viewed',
     authMiddleware,
@@ -57,6 +92,8 @@ router.get(
     chatController.getSuggestedUsers
 );
 
+router.get('/:id/role', authMiddleware, chatController.getGroupRole);
+
 router.post(
     '/:id/members',
     authMiddleware,
@@ -71,4 +108,10 @@ router.post(
     chatController.leaveConversation
 );
 
+router.delete(
+    '/:id',
+    authMiddleware,
+    chatValidation.requiredConversationId,
+    chatController.deleteConversation
+);
 export default router;

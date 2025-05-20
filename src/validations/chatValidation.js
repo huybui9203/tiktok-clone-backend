@@ -122,11 +122,13 @@ const customizeConversation = async (req, res, next) => {
         id: Joi.number().integer().required(),
         name: Joi.string().trim(),
         publicId: Joi.string().trim(),
+        isApproveMember: Joi.boolean(),
     });
     validate(schema, {
         id: req.params.id,
         name: req.body.name,
         publicId: req.body.publicId,
+        isApproveMember: req.body.isApproveMember,
     })
         .then(() => {
             next();
@@ -149,6 +151,33 @@ const addMembers = async (req, res, next) => {
         .catch(next);
 };
 
+const approveMember = async (req, res, next) => {
+    const schema = Joi.object({
+        id: Joi.number().integer().required(),
+        memberId: Joi.number().integer().required(),
+    });
+    validate(schema, {
+        id: req.params.id,
+        memberId: req.body.memberId,
+    })
+        .then(() => {
+            next();
+        })
+        .catch(next);
+};
+
+const declineMember = async (req, res, next) => {
+    const schema = Joi.object({
+        id: Joi.number().integer().required(),
+        memberId: Joi.number().integer().required(),
+    });
+    validate(schema, req.params)
+        .then(() => {
+            next();
+        })
+        .catch(next);
+};
+
 export {
     sendMessage,
     reactMessage,
@@ -159,4 +188,6 @@ export {
     requiredConversationId,
     customizeConversation,
     addMembers,
+    approveMember,
+    declineMember,
 };

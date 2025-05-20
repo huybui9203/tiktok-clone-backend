@@ -14,6 +14,12 @@ module.exports = (sequelize, DataTypes) => {
                 targetKey: 'id',
                 as: 'user',
             });
+
+            Conversation_member.belongsTo(models.User, {
+                foreignKey: 'add_by',
+                targetKey: 'id',
+                as: 'add_by_member',
+            });
         }
     }
     Conversation_member.init(
@@ -21,6 +27,9 @@ module.exports = (sequelize, DataTypes) => {
             conversation_id: DataTypes.INTEGER,
             user_id: DataTypes.INTEGER,
             last_viewed_at: DataTypes.DATE,
+            role: DataTypes.ENUM('creator', 'admin', 'member'),
+            status: DataTypes.ENUM('pending', 'approved'),
+            add_by: DataTypes.INTEGER,
         },
         {
             sequelize,
