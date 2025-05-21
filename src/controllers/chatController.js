@@ -847,7 +847,11 @@ const addMembers = async (req, res, next) => {
         const { id } = req.params;
         const { memberIds } = req.body;
         const conversationId = Number(id);
-        await chatService.addMembers(conversationId, currentUserId, memberIds);
+        const status = await chatService.addMembers(
+            conversationId,
+            currentUserId,
+            memberIds
+        );
 
         // io.to(memberIds.map((id) => `user:${id}`)).emit('join-conversation', {
         //     conversationId,
@@ -858,6 +862,13 @@ const addMembers = async (req, res, next) => {
                 currentUserId,
                 conversationId
             );
+
+        if (status === 'approved') {
+            const individualRooms = memberIds?.map((id) => `user:${id}`);
+            io.in(individualRooms).socketsJoin(
+                `conversation:${conversationId}`
+            );
+        }
 
         res.status(StatusCodes.CREATED).json({
             message: 'success',
@@ -889,6 +900,9 @@ const leaveConversation = async (req, res, next) => {
                 currentUserId,
                 conversationId
             );
+
+        const individualRooms = memberIds?.map((id) => `user:${id}`);
+        io.in(individualRooms).socketsLeave(`conversation:${conversationId}`);
 
         res.status(StatusCodes.OK).json({
             message: 'success',
@@ -940,6 +954,8 @@ const approveMember = async (req, res, next) => {
                 currentUserId,
                 conversationId
             );
+
+        io.in(`user:${memberId}`).socketsJoin(`conversation:${conversationId}`);
 
         res.status(StatusCodes.CREATED).json({
             message: 'success',

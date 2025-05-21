@@ -137,6 +137,21 @@ const sendMessage = async ({
             );
             newMessage = messageResult;
         } else {
+            //if has conversation then check sender is member
+            const isMember = await db.Conversation_member.findOne({
+                where: {
+                    user_id: senderId,
+                    conversation_id: conversationId,
+                },
+            });
+
+            if (!isMember) {
+                throw new ApiError(
+                    StatusCodes.FORBIDDEN,
+                    'Only the member of this conversation can send message.'
+                );
+            }
+
             let lastMessageId;
             if (message && attachments) {
                 newMessage = await db.Message.bulkCreate(
@@ -726,6 +741,7 @@ const getConversationNameAndMemberCount = async (
     const LIMIT_NAMES_COUNT = 6;
     const conversationData = await db.Conversation.findByPk(conversationId, {
         attributes: [
+            'name',
             [
                 db.sequelize.literal(`
                         CASE
@@ -744,7 +760,7 @@ const getConversationNameAndMemberCount = async (
                             else Conversation.name
                         END
                     `),
-                'name',
+                'default_name',
             ],
             [
                 db.sequelize.literal(`
@@ -775,12 +791,16 @@ const getConversationNameAndMemberCount = async (
     });
 
     const conversation = conversationData.toJSON();
-    const { name, members_count, avatar } = conversation;
+    const { name, default_name, members_count, avatar } = conversation;
 
     const groupAvatar = avatar.split(' ').map((url) => url.replace(/\"/g, ''));
 
     return {
-        name: members_count > LIMIT_NAMES_COUNT ? `${name}, others` : name,
+        name:
+            name ||
+            (members_count > LIMIT_NAMES_COUNT
+                ? `${default_name}, others`
+                : default_name),
         avatar: groupAvatar,
         members_count,
     };
@@ -951,9 +971,10 @@ const getListConversations = async (currentUserId, page, perPage) => {
                 creator_id,
                 name,
                 default_name:
-                    members_count > LIMIT_NAMES_COUNT
+                    name ||
+                    (members_count > LIMIT_NAMES_COUNT
                         ? `${default_name}, others`
-                        : default_name,
+                        : default_name),
                 avatar: groupAvatar,
                 type,
                 members_count,
@@ -1488,6 +1509,7 @@ const addMembers = async (conversationId, currentUserId, memberIds) => {
             add_by: currentUserId,
         }))
     );
+    return status;
 };
 
 const leaveConversation = async (conversationId, currentUserId, memberIds) => {
@@ -1647,7 +1669,8 @@ const approveMember = async (conversationId, currentUserId, memberId) => {
         },
         {
             where: {
-                id: memberId,
+                conversation_id: conversationId,
+                user_id: memberId,
             },
         }
     );
@@ -1662,7 +1685,8 @@ const declineMember = async (conversationId, currentUserId, memberId) => {
 
     await db.Conversation_member.destroy({
         where: {
-            id: memberId,
+            conversation_id: conversationId,
+            user_id: memberId,
         },
     });
 };

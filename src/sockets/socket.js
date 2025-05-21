@@ -164,6 +164,7 @@ const getAllConversationOfUser = async (userId) => {
     const listConversations = await db.Conversation_member.findAll({
         where: {
             user_id: userId,
+            status: 'approved',
         },
         attributes: ['conversation_id'],
     });
